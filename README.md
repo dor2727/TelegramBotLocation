@@ -1,3 +1,6 @@
+Note: the code is based on:
+https://github.com/python-telegram-bot/python-telegram-bot/blob/master/examples/inlinekeyboard.py
+
 # Initialize
 
 Start with `BotFather`
@@ -5,6 +8,8 @@ Start with `BotFather`
 1) Use `/newbot`
 2) Follow it's instructions
 3) copy the token, and place it in `ROOT_REPO_FOLDER/Data/key`
+
+4) Optional: use `/setcommands` in order to add command-completion
 
 # Usage
 
