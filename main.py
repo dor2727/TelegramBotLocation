@@ -31,7 +31,13 @@ ALL_USERS: dict[UserChatId, UserName] = get_all_users()
 SUPER_USERS: list[UserChatId] = [784239219]
 
 # initialize an empty results list
-RESULTS: list[tuple[CurrentTime, ResultsType]] = []
+RESULTS: dict[UserName, list[tuple[UserResponse, CurrentTime]]] = {
+    user: []
+    for user in ALL_USERS.values()
+}
+
+# store list of users, and their [result, time of result]
+# allow users to update on demand
 
 #
 # Utils
@@ -44,17 +50,6 @@ def read_file(filename):
     data = handle.read().strip()
     handle.close()
     return data
-
-def get_last_result(chat_id: int | None=None) -> ResultsType:
-    last_result = RESULTS[-1][1]
-    if chat_id is None:
-        return last_result
-    else:
-        return last_result[ ALL_USERS[chat_id] ]
-
-
-def pprint_last_result() -> str:
-    return pprint.pformat(get_last_result(), indent=4)
 
 def only_sudo(func):
     async def inner(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -78,9 +73,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Requesting the location of everyone
 @only_sudo
 async def send_to_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Create a new results list
-    RESULTS.append((now(), {}))
-
     logger.info(f"[*] Sending to all")
     # Optional Todo: can be async.gather or async.call_all or something
     # Optional Todo: re-collect `ALL_USERS` at this point, so that the folder of `chat_id` has a chance to update.
@@ -97,13 +89,15 @@ async def send_to_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         ],
                     ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("Where are you?:", reply_markup=reply_markup)
+        await context.bot.send_message(chat_id=chat_id, text="Where are you?:", reply_markup=reply_markup)
 
 # Adding a command for the user to update its location
 async def update(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
-    await update.message.reply_text(f"You previously were \"{get_last_result(chat_id)}\"")
+    if RESULTS[ ALL_USERS[chat_id] ]:
+        last_result = RESULTS[ ALL_USERS[chat_id] ][-1]
+        await update.message.reply_text(f"You previously were \"{last_result[0]}\" (at {last_result[1]})")
 
     keyboard = [
                     [
@@ -130,23 +124,23 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     user = ALL_USERS[chat_id]
     logger.info(f"[*] Got response from {chat_id=}, who is {user}, is: {query.data}")
-    last_result = get_last_result()
 
-    result = raw_result = query.data
+    result = query.data
     if result.endswith("(update)"):
         result = result[:-8]
-    else:
-        if user in last_result:
-            logger.warning(f"[!] {user=} re-submitted a response. Previous: {last_result[user]}, Current: {query.data}")
-    last_result[user] = result
+    RESULTS[user].append((result, now()))
 
-    await query.edit_message_text(text=f"Selected option: {result}\n{now()}")
+    await query.edit_message_text(text=f"Selected option: {RESULTS[user][-1][0]}\n{RESULTS[user][-1][1]}")
 
 @only_sudo
 async def query_status(update, context):
     chat_id = update.effective_chat.id
-    last_result = RESULTS[-1][1]
-    pretty_result = pprint.pformat(last_result, indent=4)
+
+    results = {
+        user: user_results[-1] if user_results else ("None", "None")
+        for user, user_results in RESULTS.items()
+    }
+    pretty_result = pprint.pformat(results, indent=4)
     await context.bot.send_message(chat_id=chat_id, text=f"current results: {pretty_result}")
 
 if __name__ == '__main__':
