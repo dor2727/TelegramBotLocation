@@ -1,6 +1,3 @@
-Note: the code is based on:
-https://github.com/python-telegram-bot/python-telegram-bot/blob/master/examples/inlinekeyboard.py
-
 # Initialize
 
 Start with `BotFather`
@@ -9,7 +6,21 @@ Start with `BotFather`
 2) Follow it's instructions
 3) copy the token, and place it in `ROOT_REPO_FOLDER/Data/key`
 
-4) Optional: use `/setcommands` in order to add command-completion
+4) Optional: set commands
+You may set `/setcommands` to `BotFather`
+```
+start - set your keyboard
+set_name - tell us your name
+set_location - should be used from the keyboard
+```
+Admin commands:
+```
+send_to_all - requests time from every user
+send_to_missing <optional: time (e.g. '5h' / '20m' / '3d')>
+update_all_users - updates the list (i.e. re-scans the file system)
+query - returns the last update of each user
+```
+
 
 # Usage
 
@@ -24,6 +35,21 @@ Data/
 ```
 And within each file, place only the `chat_id` of that user
 
+# User usage
+
+## start
+
+This will set your keyboard
+
+## set_name
+
+This will tell the admin your name, and will link it yo your `chat_id`
+
+## set_location
+
+This is a command that's send via the keyboard.
+Try not to use it manually, as the results may be processed, and typos may affect the post-process.
+
 # Admin usage
 
 Place your `chat_id` in the `SUPER_USERS` list.
@@ -34,15 +60,15 @@ You may now call the command `/send_to_all`.
 This can only be invoked by a super user, and will send a message to everyone asking for their location.
 (Note: if you place your own `chat_id` in the `chat_id` folder, you will also be asked for your location)
 
-## Replying to Send-to-all
+## Send to missing
 
-Every user will get a dialog asking for their location.
-Upon answering, the dialog will transform to your-message-was-accepted
-(Note that there are also log messages along the way in the server)
+You may now call the command `/send_to_missing <time>`.
+Specify a time (default: 8h), and everyone who hadn't reply in that amount of time, will be sent an angry (i.e. capitalized) question
+And, tells the admin who was asked again
 
-## Changing your mind
+## Update users list
 
-A user may use the `/update` command, which will show him his latest response, and will allow him to change it.
+You may call the command `/update_all_users`, which refreshed the `ALL_USERS` variable
 
 ## Query
 
