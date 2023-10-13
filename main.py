@@ -4,10 +4,10 @@ import pprint
 import os
 
 from telegram import KeyboardButton, ReplyKeyboardMarkup, Update
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
-from consts import KEY_FILEPATH, USERS_WHO_SAID_START_FILEPATH, USERS_WHO_SAID_NAME_BASE_FILEPATH, UNVERIFIED_CHAT_ID_FOLDER
+from consts import KEY_FILEPATH, USERS_WHO_SAID_START_FILEPATH, USERS_WHO_SAID_NAME_BASE_FILEPATH, UNVERIFIED_CHAT_ID_FOLDER, NAMES_FOLDER
 from get_users import get_all_users
 
 
@@ -95,8 +95,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open(USERS_WHO_SAID_START_FILEPATH, 'a') as f:
         f.write(f"Date: {strftime(now())} ; {chat_id=}\n")
 
-    # return 'welcome' & set keyboard
-    await context.bot.send_message(chat_id=chat_id, text=f"Welcome!\nYour chat_id is: {chat_id}", reply_markup=REPLY_MARKUP)
+    if chat_id in ALL_USERS:
+        # return 'welcome' & set keyboard
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"Welcome {ALL_USERS[chat_id]}!\n"
+                 f"Your chat_id is: {chat_id}.\n"
+                 f"Your last location is: {RESULTS[ALL_USERS[chat_id]][-1][0] if RESULTS[ALL_USERS[chat_id]] else 'Not set'}\n"
+                 f"Setting your keyboard.\n",
+            reply_markup=REPLY_MARKUP
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"Welcome!\n"
+                 f"Your chat_id is: {chat_id}.\n"
+                 f"We will now ask you for your name.\n"
+                 f"Remember: in case your `set location` keyboard goes missing, just send `/start` again.\n"
+                 f"(You may simply click on a previous message that sent `/start`, and it will automatically send this command to the bot)\n"
+                 f"\n"
+                 f"Please reply with your name:"
+        )
 
 async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -110,19 +129,72 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"[*] Got `/set_name` from {chat_id=} ; {name=}")
 
     # save to file
-    if not os.path.isdir(UNVERIFIED_CHAT_ID_FOLDER):
-        os.mkdir(UNVERIFIED_CHAT_ID_FOLDER)
-    with open(f"{USERS_WHO_SAID_NAME_BASE_FILEPATH}{name}", 'w') as f:
+    if not os.path.isdir(NAMES_FOLDER):
+        os.mkdir(NAMES_FOLDER)
+
+    user_file = f"{USERS_WHO_SAID_NAME_BASE_FILEPATH}{name}"
+    if os.path.isfile(user_file):
+        await update.message.reply_text(
+            text=f"You are already registered.\nIf you still encounter a problem, tell the admin: {chat_id=}",
+            reply_markup=REPLY_MARKUP
+        )
+        return
+
+    with open(user_file, 'w') as f:
         f.write(str(chat_id))
 
+    ALL_USERS[chat_id] = name
+    RESULTS[name] = []
+
     await update.message.reply_text(text=f"Welcome {name=}!\nYour chat_id is: {chat_id}")
+
+async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    if chat_id in ALL_USERS:
+        await update.message.reply_text(
+            text=f"Unknown command sent. Ignoring.\nYou are already registered as:\nname={ALL_USERS[chat_id]}\n{chat_id=}",
+            reply_markup=REPLY_MARKUP
+        )
+        return
+
+    name = update.message.text.strip()
+
+    # save to file
+    if not os.path.isdir(NAMES_FOLDER):
+        os.mkdir(NAMES_FOLDER)
+
+    user_file = f"{USERS_WHO_SAID_NAME_BASE_FILEPATH}{name}"
+    if os.path.isfile(user_file):
+        await update.message.reply_text(
+            text=f"You are already registered.\nIf you still encounter a problem, tell the admin: {chat_id=}",
+            reply_markup=REPLY_MARKUP
+        )
+        return
+
+    with open(user_file, 'w') as f:
+        f.write(str(chat_id))
+
+    ALL_USERS[chat_id] = name
+    RESULTS[name] = []
+
+    await update.message.reply_text(
+        text=f"We're registering you:\n{name=}\n{chat_id=}\n"
+             f"Additionally, we're setting your keyboard.\n"
+             f"(If you need your keyboard again, just send `/start`)\n",
+        reply_markup=REPLY_MARKUP
+    )
+
 
 async def set_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
     if update.message.text.strip() == "/set_location":
         logger.info(f"[x] Got empty `/set_location` from {chat_id=}")
-        await update.message.reply_text(text=f"Please use '/set_location' only from the keyboard.\nIf you lost your keyboard, please send '/start' again")
+        await update.message.reply_text(
+            text=f"Please use '/set_location' only from the keyboard.\nIf you lost your keyboard, please send '/start' again",
+            reply_markup=REPLY_MARKUP
+        )
         return
 
     user = ALL_USERS[chat_id]
@@ -132,7 +204,10 @@ async def set_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     RESULTS[user].append((location, now()))
     last_user_result = RESULTS[user][-1]
 
-    await update.message.reply_text(text=f"Selected option: {last_user_result[0]}\n{strftime(last_user_result[1])}")
+    await update.message.reply_text(
+        text=f"Selected option: {last_user_result[0]}\n{strftime(last_user_result[1])}",
+        reply_markup=REPLY_MARKUP
+    )
 
 # Requesting the location of everyone
 @only_sudo
@@ -141,7 +216,6 @@ async def send_to_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for chat_id in ALL_USERS:
         await context.bot.send_message(chat_id=chat_id, text="Where are you?:", reply_markup=REPLY_MARKUP)
 
-# Todo
 @only_sudo
 async def send_to_missing(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"[*] Sending to missing")
@@ -178,7 +252,6 @@ async def send_to_missing(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pretty_missing_users = '\n'.join('- '+u for u in the_missing_users)
     await update.message.reply_text(text=f"Re-sent to the following:\n{pretty_missing_users}")
 
-
 @only_sudo
 async def update_all_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"[*] Updating `ALL_USERS`")
@@ -186,6 +259,11 @@ async def update_all_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global ALL_USERS
     try:
         ALL_USERS = get_all_users()
+
+        for user in ALL_USERS.values():
+            if user not in RESULTS:
+                RESULTS[user] = []
+
         message = "Successfully updated ALL_USERS"
     except Exception as e:
         message = f"Failed to update ALL_USERS. Error: {e}"
@@ -218,6 +296,8 @@ if __name__ == '__main__':
     # set name
     set_name_handler = CommandHandler('set_name', set_name)
     application.add_handler(set_name_handler)
+    # another way to set name
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_command))
     # set location
     set_location_handler = CommandHandler('set_location', set_location)
     application.add_handler(set_location_handler)
